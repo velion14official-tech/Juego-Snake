@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Web de prueba 1.0</title>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: #fafafa;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 40px 20px;
+    color: #1a1a1a;
+  }
+  h1 {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9a9a9a;
+    margin: 0 0 32px 0;
+  }
+  #score {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1a1a1a;
+    margin-bottom: 20px;
+    letter-spacing: 0.02em;
+  }
+  #game-frame {
+    background: #9bab86;
+    border: 8px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 10px;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.4);
+  }
+  canvas {
+    background: #9bab86;
+    display: block;
+  }
+  #msg {
+    color: #6b6b6b;
+    font-size: 13px;
+    font-weight: 400;
+    margin-top: 20px;
+    text-align: center;
+    max-width: 280px;
+    line-height: 1.5;
+  }
+  button {
+    margin-top: 16px;
+    padding: 10px 28px;
+    background: #1a1a1a;
+    color: #fafafa;
+    border: none;
+    border-radius: 24px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    transition: opacity 0.15s ease;
+  }
+  button:hover {
+    opacity: 0.75;
+  }
+  button:active {
+    opacity: 0.6;
+  }
+</style>
+</head>
+<body>
+  <h1>web de prueba 1.0</h1>
+  <div id="score">Puntos: 0</div>
+  <div id="game-frame">
+    <canvas id="game" width="320" height="320"></canvas>
+  </div>
+  <div id="msg">Usa las flechas del teclado para moverte. Pulsa "Empezar" para jugar.</div>
+  <button id="startBtn">Empezar</button>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const box = 16;
+const cols = canvas.width / box;
+const rows = canvas.height / box;
+
+let snake, direction, nextDirection, food, score, gameInterval, running;
+
+function initGame() {
+  snake = [{x: 8, y: 8}];
+  direction = {x: 1, y: 0};
+  nextDirection = {x: 1, y: 0};
+  score = 0;
+  placeFood();
+  document.getElementById('score').textContent = 'Puntos: 0';
+  document.getElementById('msg').textContent = 'Usa las flechas del teclado para moverte.';
+}
+
+function placeFood() {
+  let valid = false;
+  while (!valid) {
+    food = {
+      x: Math.floor(Math.random() * cols),
+      y: Math.floor(Math.random() * rows)
+    };
+    valid = !snake.some(s => s.x === food.x && s.y === food.y);
+  }
+}
+
+function drawRoundedRect(x, y, w, h, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function draw() {
+  // fondo con cuadrícula sutil para dar profundidad
+  ctx.fillStyle = '#9bab86';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = 'rgba(43,58,31,0.08)';
+  for (let i = 0; i <= cols; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * box, 0);
+    ctx.lineTo(i * box, canvas.height);
+    ctx.stroke();
+  }
+  for (let j = 0; j <= rows; j++) {
+    ctx.beginPath();
+    ctx.moveTo(0, j * box);
+    ctx.lineTo(canvas.width, j * box);
+    ctx.stroke();
+  }
+
+  // cuerpo de la serpiente: verde oscuro, un poco redondeado
+  snake.forEach((seg, i) => {
+    if (i === 0) return; // la cabeza se dibuja aparte
+    const shade = i % 2 === 0 ? '#243318' : '#2b3a1f';
+    drawRoundedRect(seg.x * box + 1, seg.y * box + 1, box - 2, box - 2, 4, shade);
+  });
+
+  // cabeza: color distinto + ojos, orientada según la dirección
+  const head = snake[0];
+  drawRoundedRect(head.x * box, head.y * box, box, box, 5, '#1c2a12');
+
+  ctx.fillStyle = '#e8f0da';
+  const eyeSize = 3;
+  let eye1, eye2;
+  if (direction.x === 1) { // derecha
+    eye1 = {x: head.x * box + box - 5, y: head.y * box + 3};
+    eye2 = {x: head.x * box + box - 5, y: head.y * box + box - 6};
+  } else if (direction.x === -1) { // izquierda
+    eye1 = {x: head.x * box + 2, y: head.y * box + 3};
+    eye2 = {x: head.x * box + 2, y: head.y * box + box - 6};
+  } else if (direction.y === -1) { // arriba
+    eye1 = {x: head.x * box + 3, y: head.y * box + 2};
+    eye2 = {x: head.x * box + box - 6, y: head.y * box + 2};
+  } else { // abajo
+    eye1 = {x: head.x * box + 3, y: head.y * box + box - 5};
+    eye2 = {x: head.x * box + box - 6, y: head.y * box + box - 5};
+  }
+  ctx.fillRect(eye1.x, eye1.y, eyeSize, eyeSize);
+  ctx.fillRect(eye2.x, eye2.y, eyeSize, eyeSize);
+
+  // comida: manzana roja con brillo, círculo para que no se confunda con la serpiente
+  const fx = food.x * box + box / 2;
+  const fy = food.y * box + box / 2;
+  ctx.fillStyle = '#a4292b';
+  ctx.beginPath();
+  ctx.arc(fx, fy, box / 2 - 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#e07b7d';
+  ctx.beginPath();
+  ctx.arc(fx - 2, fy - 2, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#4a6b2a';
+  ctx.fillRect(fx - 1, food.y * box + 1, 2, 3);
+}
+
+function update() {
+  direction = nextDirection;
+  const head = {x: snake[0].x + direction.x, y: snake[0].y + direction.y};
+
+  // colisión con paredes
+  if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows) {
+    return gameOver();
+  }
+  // colisión consigo misma
+  if (snake.some(s => s.x === head.x && s.y === head.y)) {
+    return gameOver();
+  }
+
+  snake.unshift(head);
+
+  if (head.x === food.x && head.y === food.y) {
+    score++;
+    document.getElementById('score').textContent = 'Puntos: ' + score;
+    placeFood();
+  } else {
+    snake.pop();
+  }
+
+  draw();
+}
+
+function gameOver() {
+  clearInterval(gameInterval);
+  running = false;
+  document.getElementById('msg').textContent = '¡Has perdido! Puntuación final: ' + score + '. Pulsa "Empezar" para reintentar.';
+}
+
+function startGame() {
+  if (running) return;
+  initGame();
+  running = true;
+  draw();
+  gameInterval = setInterval(update, 130);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+document.addEventListener('keydown', (e) => {
+  const arrowKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+  if (arrowKeys.includes(e.key)) {
+    e.preventDefault(); // evita que la página se desplace con las flechas
+  }
+  switch(e.key) {
+    case 'ArrowUp':
+      if (direction.y === 0) nextDirection = {x: 0, y: -1};
+      break;
+    case 'ArrowDown':
+      if (direction.y === 0) nextDirection = {x: 0, y: 1};
+      break;
+    case 'ArrowLeft':
+      if (direction.x === 0) nextDirection = {x: -1, y: 0};
+      break;
+    case 'ArrowRight':
+      if (direction.x === 0) nextDirection = {x: 1, y: 0};
+      break;
+  }
+});
+
+initGame();
+draw();
+</script>
+</body>
+</html>
